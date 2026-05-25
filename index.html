@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動多彩粒子與煙火系統</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background-color: #050505; 
+            overflow: hidden; 
+            cursor: crosshair; /* 讓滑鼠變成十字準星，更有互動感 */
+        }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas1"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas1');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let bgParticles = [];
+    let fireworks = [];
+    let explosionParticles = [];
+    
+    const colors = [
+        '#FF5733', '#33FF57', '#3357FF', '#FF33A8', 
+        '#33FFF5', '#F5FF33', '#FF8C33', '#A133FF', '#00FF7F'
+    ];
+
+    const mouse = {
+        x: null,
+        y: null,
+        radius: 100
+    };
+
+    window.addEventListener('mousemove', (event) => {
+        mouse.x = event.x;
+        mouse.y = event.y;
+    });
+
+    // 點擊滑鼠直接在該位置產生煙火
+    window.addEventListener('mousedown', (event) => {
+        const fw = new Firework();
+        fw.x = event.x;
+        fw.y = canvas.height;
+        fw.targetY = event.y;
+        fireworks.push(fw);
+    });
+
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        initBackground();
+    });
+
+    // 1. 背景彩色漂浮粒子 (包含滑鼠互動與發光)
+    class BackgroundParticle {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = Math.random() * 2 + 0.5;
+            this.speedX = Math.random() * 1.2 - 0.6;
+            this.speedY = Math.random() * 1.2 - 0.6;
+            this.color = colors[Math.floor(Math.random() * colors.length)];
+            this.opacity = Math.random() * 0.6 + 0.2;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.opacity;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = this.color;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        update() {
+            // 滑鼠排斥邏輯
+            let dx = mouse.x - this.x;
+            let dy = mouse.y - this.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < mouse.radius) {
+                const force = (mouse.radius - distance) / mouse.radius;
+                const dirX = dx / distance;
+                const dirY = dy / distance;
+                this.x -= dirX * force * 5;
+                this.y -= dirY * force * 5;
+            }
+
+            this.x += this.speedX;
+            this.y += this.speedY;
+
+            if (this.x > canvas.width || this.x < 0) this.speedX *= -1;
+            if (this.y > canvas.height || this.y < 0) this.speedY *= -1;
+            this.draw();
+        }
+    }
+
+    // 2. 煙火爆炸碎片
+    class ExplosionParticle {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.size = Math.random() * 2.5 + 1;
+            this.speedX = Math.random() * 8 - 4;
+            this.speedY = Math.random() * 8 - 4;
+            this.gravity = 0.12;
+            this.friction = 0.96;
+            this.opacity = 1;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.opacity;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.restore();
+        }
+        update() {
+            this.speedY += this.gravity;
+            this.speedX *= this.friction;
+            this.speedY *= this.friction;
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.opacity -= 0.012;
+        }
+    }
+
+    // 3. 煙火火箭
+    class Firework {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = canvas.height;
+            this.targetY = Math.random() * (canvas.height * 0.4) + 50;
+            this.speedY = Math.random() * 4 + 8;
+            this.color = colors[Math.floor(Math.random() * colors.length)];
+            this.exploded = false;
+        }
+        update() {
+            if (!this.exploded) {
+                this.y -= this.speedY;
+                if (this.y <= this.targetY) {
+                    this.exploded = true;
+                    for (let i = 0; i < 80; i++) {
+                        explosionParticles.push(new ExplosionParticle(this.x, this.y, this.color));
+                    }
+                }
+                this.draw();
+            }
+        }
+        draw() {
+            ctx.save();
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function initBackground() {
+        bgParticles = [];
+        for (let i = 0; i < 150; i++) {
+            bgParticles.push(new BackgroundParticle());
+        }
+    }
+
+    function animate() {
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        bgParticles.forEach(p => p.update());
+
+        if (Math.random() < 0.03) fireworks.push(new Firework());
+
+        for (let i = fireworks.length - 1; i >= 0; i--) {
+            fireworks[i].update();
+            if (fireworks[i].exploded) fireworks.splice(i, 1);
+        }
+
+        for (let i = explosionParticles.length - 1; i >= 0; i--) {
+            explosionParticles[i].update();
+            explosionParticles[i].draw();
+            if (explosionParticles[i].opacity <= 0) explosionParticles.splice(i, 1);
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    initBackground();
+    animate();
+</script>
+
+</body>
+</html>
